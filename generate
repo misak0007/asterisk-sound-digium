@@ -1,0 +1,253 @@
+#!/bin/bash
+
+out_f=Makefile.new
+out_f2=install.tmp
+out_f3=prepare.tmp
+
+rm ${out_f}
+rm ${out_f2}
+rm ${out_f3}
+
+mkdir tmp
+
+
+cat <<EOF >> ${out_f}
+#
+# Copyright (C) 2019 OpenWrt.org
+#
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+
+include \$(TOPDIR)/rules.mk
+
+PKG_NAME:=asterisk-sound-digium
+PKG_VERSION:=1.0.1
+PKG_RELEASE:=1
+PKG_BUILD_PARALLEL:=0
+
+PKG_BUILD_DIR:=\$(BUILD_DIR)/asterisk-sound-digium-\$(PKG_VERSION)
+
+PKG_LICENSE:=GPL-3.0
+PKG_LICENSE_FILES:=COPYING LICENSE
+PKG_MAINTAINER:=Michael Gruz <michael.gruz@gmail.com>
+
+include \$(INCLUDE_DIR)/package.mk
+include \$(INCLUDE_DIR)/download.mk
+
+define Package/asterisk-sound-digium/Default
+  SUBMENU:=Telephony
+  SECTION:=net
+  CATEGORY:=Network
+endef
+
+define Download/asterisk-sound
+  URL:=https://downloads.asterisk.org/pub/telephony/sounds
+  FILE:=asterisk-\$(2)sounds-\$(3)-current.tar.gz
+  URL_FILE:=asterisk-\$(2)sounds-\$(3)-current.tar.gz
+  HASH:=\$(4)
+  SUBDIR:=\$(PKG_SOURCE_SUBDIR)
+endef
+
+define Download/asterisk-moh
+  URL:=https://downloads.asterisk.org/pub/telephony/sounds
+  FILE:=asterisk-moh-opsound-\$(2)-current.tar.gz
+  URL_FILE:=asterisk-moh-opsounds-\$(2)-current.tar.gz
+  HASH:=\$(3)
+  SUBDIR:=\$(PKG_SOURCE_SUBDIR)
+endef
+
+EOF
+
+for lang in en en_AU en_GB en_NZ es fr it ja ru sv; do
+for fmt in alaw g722 g729 gsm sln16 ulaw wav siren7 siren14; do
+echo "${lang} ${fmt}"
+if [ ! -f tmp/asterisk-core-sounds-${lang}-${fmt}-current.tar.gz ];then wget -P tmp https://downloads.asterisk.org/pub/telephony/sounds/asterisk-core-sounds-${lang}-${fmt}-current.tar.gz;fi
+suma=$(sha256sum tmp/asterisk-core-sounds-${lang}-${fmt}-current.tar.gz | cut -d" " -f1)
+cat <<EOF >>  ${out_f}
+ifneq (\$(CONFIG_PACKAGE_asterisk-core-sound-${lang}-${fmt})\$(CONFIG_PACKAGE_asterisk-core-sound-voicemail-${lang}-${fmt}),)
+\$(eval \$(call Download,asterisk-sound,core-,${lang}-${fmt},${suma}))
+endif
+EOF
+cat <<EOF >> ${out_f2}
+\$(eval \$(call BuildasteriskCoreSound,${lang}-${fmt},${lang} core sound Files. ${fmt} format,${fmt},core-${lang}))
+\$(eval \$(call BuildasteriskVoicemail,voicemail-${lang}-${fmt},${lang} core voice mail Files. ${fmt} format,${fmt},core-${lang}))
+EOF
+cat <<EOF >> ${out_f3}
+ifneq (\$(CONFIG_PACKAGE_asterisk-core-sound-${lang}-${fmt})\$(CONFIG_PACKAGE_asterisk-core-sound-voicemail-${lang}-${fmt}),)
+	\$(INSTALL_DIR) \$(PKG_BUILD_DIR)/core-${lang}
+	\$(HOST_TAR) -C \$(PKG_BUILD_DIR)/core-${lang} -xzf \$(DL_DIR)/asterisk-core-sounds-${lang}-${fmt}-current.tar.gz
+endif
+EOF
+done
+done
+
+for lang in en en_GB fr; do
+for fmt in alaw g722 g729 gsm sln16 ulaw wav siren7 siren14; do
+echo "${lang} ${fmt}"
+if [ ! -f tmp/asterisk-extra-sounds-${lang}-${fmt}-current.tar.gz ];then wget -P tmp https://downloads.asterisk.org/pub/telephony/sounds/asterisk-extra-sounds-${lang}-${fmt}-current.tar.gz;fi
+suma=$(sha256sum tmp/asterisk-extra-sounds-${lang}-${fmt}-current.tar.gz | cut -d" " -f1)
+cat <<EOF >> ${out_f}
+ifneq (\$(CONFIG_PACKAGE_asterisk-extra-sound-${lang}-${fmt}),)
+\$(eval \$(call Download,asterisk-sound,extra-,${lang}-${fmt},${suma}))
+endif
+EOF
+cat <<EOF >> ${out_f2}
+\$(eval \$(call BuildasteriskExtraSound,${lang}-${fmt},${lang} extra sound Files. ${fmt} format,${fmt},extra-${lang}))
+EOF
+cat <<EOF >> ${out_f3}
+ifneq (\$(CONFIG_PACKAGE_asterisk-extra-sound-${lang}-${fmt}),)
+	\$(INSTALL_DIR) \$(PKG_BUILD_DIR)/extra-${lang}
+	\$(HOST_TAR) -C \$(PKG_BUILD_DIR)/extra-${lang} -xzf \$(DL_DIR)/asterisk-extra-sounds-${lang}-${fmt}-current.tar.gz
+endif
+EOF
+done
+done
+
+for fmt in alaw g722 g729 gsm sln16 ulaw wav siren7 siren14; do
+echo "${fmt}"
+if [ ! -f tmp/asterisk-moh-opsound-${fmt}-current.tar.gz ];then wget -P tmp https://downloads.asterisk.org/pub/telephony/sounds/asterisk-moh-opsound-${fmt}-current.tar.gz;fi
+suma=$(sha256sum tmp/asterisk-moh-opsound-${fmt}-current.tar.gz | cut -d" " -f1)
+cat <<EOF >> ${out_f}
+ifneq (\$(CONFIG_PACKAGE_asterisk-moh-opsound-${fmt}),)
+\$(eval \$(call Download,asterisk-moh,${fmt},${suma}))
+endif
+EOF
+cat <<EOF >> ${out_f2}
+\$(eval \$(call BuildasteriskMohSound,${fmt},moh sound Files. ${fmt} format))
+EOF
+cat <<EOF >> ${out_f3}
+ifneq (\$(CONFIG_PACKAGE_asterisk-moh-opsound-${fmt}),)
+	\$(INSTALL_DIR) \$(PKG_BUILD_DIR)/moh
+	\$(HOST_TAR) -C \$(PKG_BUILD_DIR)/moh -xzf \$(DL_DIR)/asterisk-moh-opsound-${fmt}-current.tar.gz
+endif
+EOF
+done
+
+cat <<EOF >> ${out_f}
+
+define Build/Prepare
+	\$(INSTALL_DIR) \$(PKG_BUILD_DIR)/core-en
+EOF
+cat ${out_f3} >> ${out_f}
+cat <<EOF >> ${out_f}
+endef
+
+define Build/Configure
+endef
+
+define Build/Compile
+endef
+
+define Package/asterisk/install/sounds
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/dictate
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/digits
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/followme
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/letters
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/phonetic
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/silence
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/dictate/*.\$(2) \$(1)/usr/share/asterisk/sounds/dictate
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/digits/*.\$(2) \$(1)/usr/share/asterisk/sounds/digits
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/followme/*.\$(2) \$(1)/usr/share/asterisk/sounds/followme
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/letters/*.\$(2) \$(1)/usr/share/asterisk/sounds/letters
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/phonetic/*.\$(2) \$(1)/usr/share/asterisk/sounds/phonetic
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/silence/*.\$(2) \$(1)/usr/share/asterisk/sounds/silence
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/*.\$(2) \$(1)/usr/share/asterisk/sounds/
+	rm -f \$(1)/usr/share/asterisk/sounds/vm-*
+endef
+
+define Package/asterisk/install/voicemail
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/vm-*.\$(2) \$(1)/usr/share/asterisk/sounds/
+endef
+
+define Package/asterisk/install/extra
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/ha
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/sounds/wx
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/*.\$(2) \$(1)/usr/share/asterisk/sounds/
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/wx/*.\$(2) \$(1)/usr/share/asterisk/sounds/wx
+	\$(CP) \$(PKG_BUILD_DIR)/\$(3)/ha/*.\$(2) \$(1)/usr/share/asterisk/sounds/ha
+endef
+
+define Package/asterisk/install/moh
+	\$(INSTALL_DIR) \$(1)/usr/share/asterisk/moh/
+	\$(CP) \$(PKG_BUILD_DIR)/moh/*.\$(2) \$(1)/usr/share/asterisk/moh/
+endef
+
+define BuildasteriskCoreSound
+  define Package/asterisk-core-sound-\$(1)
+  \$\$(call Package/asterisk-sound-digium/Default)
+    TITLE:=Sound support
+    DEPENDS:=asterisk
+  endef
+
+  define Package/asterisk-core-sound-\$(1)/description
+\$(2)
+  endef
+
+  define Package/asterisk-core-sound-\$(1)/install
+\$(call Package/asterisk/install/sounds,\$\$(1),\$(3),\$(4))
+  endef
+
+  \$\$(eval $\$(call BuildPackage,asterisk-core-sound-\$(1)))
+endef
+
+define BuildasteriskVoicemail
+  define Package/asterisk-core-sound-\$(1)
+  \$\$(call Package/asterisk-sound-digium/Default)
+    TITLE:=Sound support
+    DEPENDS:=asterisk
+  endef
+
+  define Package/asterisk-core-sound-\$(1)/description
+\$(2)
+  endef
+
+  define Package/asterisk-core-sound-\$(1)/install
+\$(call Package/asterisk/install/voicemail,\$\$(1),\$(3),\$(4))
+  endef
+
+  \$\$(eval \$\$(call BuildPackage,asterisk-core-sound-\$(1)))
+endef
+
+define BuildasteriskExtraSound
+  define Package/asterisk-extra-sound-\$(1)
+  \$\$(call Package/asterisk-sound-digium/Default)
+    TITLE:=Sound support
+    DEPENDS:=asterisk
+  endef
+
+  define Package/asterisk-extra-sound-\$(1)/description
+\$(2)
+  endef
+
+  define Package/asterisk-extra-sound-\$(1)/install
+\$(call Package/asterisk/install/extra,\$\$(1),\$(3),\$(4))
+  endef
+
+  \$\$(eval \$\$(call BuildPackage,asterisk-extra-sound-\$(1)))
+endef
+
+define BuildasteriskMohSound
+  define Package/asterisk-moh-opsound-\$(1)
+  \$\$(call Package/asterisk-sound-digium/Default)
+    TITLE:=Sound support
+    DEPENDS:=asterisk
+  endef
+
+  define Package/asterisk-moh-opsound-\$(1)/description
+\$(2)
+  endef
+
+  define Package/asterisk-moh-opsound-\$(1)/install
+\$(call Package/asterisk/install/moh,\$\$(1),\$(1))
+  endef
+
+  \$\$(eval \$\$(call BuildPackage,asterisk-moh-opsound-\$(1)))
+endef
+
+EOF
+cat ${out_f2} >> ${out_f}
+
